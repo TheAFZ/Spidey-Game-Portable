@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spidihibiter</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#120a1f;--ink:#e9e1f5;--cyan:#38e8e0;--panel:#24153a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:'Chakra Petch',system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+canvas{aspect-ratio:3/5;height:min(calc(100dvh - 84px),166vw);max-width:100vw;border:2px solid #3a2560;border-radius:10px}
+.row{display:flex;gap:8px}
+button{background:var(--panel);color:var(--ink);border:2px solid #4b3180;border-radius:8px;min-height:44px;padding:0 16px;font:700 15px inherit;font-family:inherit;cursor:pointer}
+button:active{border-color:var(--cyan)}
+button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+</style></head>
+<body>
+<canvas id="c" aria-label="Spidihibiter game board"></canvas>
+<div class="row">
+<button id="dm" aria-label="Lower L-arabinose dose">&minus; Dose</button>
+<button id="sw">Swap asRNA</button>
+<button id="dp" aria-label="Raise L-arabinose dose">+ Dose</button>
+</div>
+<script>
+const C=document.getElementById('c'),g=C.getContext('2d'),W=360,H=600,CW=72,SH=36,CORE=500;
+C.width=W*2;C.height=H*2;g.scale(2,2);
+const COMP={A:'U',U:'A',G:'C',C:'G'},COL={A:'#ffb454',U:'#b78cff',G:'#6ee7a0',C:'#5cc8ff'};
+const TYPES=['AUG','GCA','UUC','CGU'].map(s=>s.split('')),SWAP=TYPES.map(t=>t.map(b=>COMP[b]));
+const CD=[0,1100,700,450,280,160],BURN=[0,0,0,0,.6,1.8];
+let S,st='ready',best=0,last=0;
+function reset(){S={score:0,glow:10,combo:0,t:0,col:2,sel:0,dose:3,cd:0,strands:[],shots:[],parts:[],flash:0,spawn:.5,msg:'',msgT:0}}
+reset();
+function burst(col,y,c){for(let i=0;i<14;i++){const a=Math.random()*6.28,v=40+Math.random()*120;S.parts.push({x:col*CW+CW/2,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:.5,c})}}
+function fire(){if(st!=='play'||S.cd>0)return;
+if(!CD[S.dose]){S.msg='No asRNA made. Raise the dose.';S.msgT=1.5;return}
+S.shots.push({col:S.col,y:CORE+24,seq:SWAP[S.sel]});S.cd=CD[S.dose]/1000}
+function update(dt){
+S.t+=dt;S.cd=Math.max(0,S.cd-dt);S.msgT=Math.max(0,S.msgT-dt);S.flash=Math.max(0,S.flash-dt);
+S.glow+=BURN[S.dose]*dt;S.spawn-=dt;
+if(S.spawn<=0){S.spawn=Math.max(.6,1.7-S.t*.012);const c=Math.floor(Math.random()*5);
+if(!S.strands.some(s=>s.col===c&&s.y<30))S.strands.push({col:c,y:-SH,t:Math.floor(Math.random()*4),shake:0})}
+const v=40+Math.min(70,S.t*.9);
+for(const s of S.strands){s.y+=v*dt;s.shake=Math.max(0,s.shake-dt)}
+S.strands=S.strands.filter(s=>{if(s.y+SH>=CORE){S.glow+=14;S.combo=0;S.flash=.3;burst(s.col,CORE-10,'#ff3b4e');return false}return true});
+S.shots=S.shots.filter(p=>{p.y-=720*dt;
+const s=S.strands.find(s=>s.col===p.col&&s.y<=p.y&&s.y+SH>=p.y);
+if(s){if(TYPES[s.t].every((b,i)=>COMP[b]===p.seq[i])){S.strands.splice(S.strands.indexOf(s),1);S.combo++;S.score+=10*Math.min(S.combo,5);S.glow=Math.max(0,S.glow-4);burst(s.col,s.y+SH/2,'#38e8e0')}
+else{s.shake=.3;S.combo=0;S.glow+=6}return false}
+return p.y>-20});
+if(S.glow>=100){S.glow=100;st='over';best=Math.max(best,S.score)}}
+function T(t,x,y,sz,c,al){g.font='700 '+sz+'px "Chakra Petch",system-ui,sans-serif';g.fillStyle=c;g.textAlign=al||'center';g.textBaseline='middle';g.fillText(t,x,y)}
+function rr(x,y,w,h,r,f,s){g.beginPath();g.roundRect(x,y,w,h,r);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=2;g.stroke()}}
+function seqDraw(seq,cx,cy,sz,gap){seq.forEach((b,i)=>T(b,cx+(i-1)*gap,cy,sz,COL[b]))}
+function draw(){
+g.clearRect(0,0,W,H);g.fillStyle='#1a0f2e';g.fillRect(0,0,W,H);
+for(let i=1;i<5;i++){g.fillStyle='#ffffff10';g.fillRect(i*CW-.5,0,1,CORE)}
+g.fillStyle='#ffffff08';g.fillRect(S.col*CW,0,CW,CORE);
+const gl=S.glow/100,cg=g.createLinearGradient(0,CORE,0,H);cg.addColorStop(0,`rgba(255,59,78,${.15+gl*.5+S.flash})`);cg.addColorStop(1,'#12081f');
+g.fillStyle=cg;g.fillRect(0,CORE,W,H-CORE);
+g.strokeStyle='#ff3b4e';g.setLineDash([8,6]);g.lineWidth=2;g.beginPath();g.moveTo(0,CORE);g.lineTo(W,CORE);g.stroke();g.setLineDash([]);
+for(const s of S.strands){const sx=s.shake>0?Math.sin(s.shake*90)*4:0,x=s.col*CW+4+sx;
+rr(x,s.y,64,SH,8,'#4a0f1f',s.shake>0?'#fff':'#ff3b4e');seqDraw(TYPES[s.t],x+32,s.y+SH/2,18,18)}
+for(const p of S.shots){const x=p.col*CW+8;rr(x,p.y-11,56,22,6,'#0b3d44','#38e8e0');seqDraw(p.seq,x+28,p.y,14,15)}
+for(const p of S.parts){g.globalAlpha=Math.max(0,p.l*2);g.fillStyle=p.c;g.fillRect(p.x,p.y,4,4)}g.globalAlpha=1;
+const lx=S.col*CW+8;rr(lx,CORE+30,56,34,8,S.cd>0?'#16303a':'#0b3d44','#38e8e0');seqDraw(SWAP[S.sel],lx+28,CORE+47,18,16);
+T(S.cd>0?'making asRNA':'asRNA ready',S.col*CW+36,CORE+78,11,'#8fe9e4');
+T('cell core',W/2,H-14,12,'#ff8a96');
+g.fillStyle='#120a1f';g.fillRect(0,0,W,56);g.fillStyle='#3a2560';g.fillRect(0,56,W,2);
+T('Score '+S.score,12,18,16,'#e9e1f5','left');T(S.combo>1?'x'+Math.min(S.combo,5)+' combo':'',12,40,13,'#38e8e0','left');
+T('L-arabinose '+(S.dose*.4).toFixed(2)+' mM',W/2,18,14,'#e9e1f5');
+for(let i=0;i<6;i++)rr(W/2-45+i*16,32,12,10,3,i<=S.dose?'#38e8e0':'#3a2560');
+const gx=322,gy=30;g.lineWidth=7;g.lineCap='round';g.strokeStyle='#3a2560';g.beginPath();g.arc(gx,gy,17,.75*Math.PI,2.25*Math.PI);g.stroke();
+g.strokeStyle=`hsl(${140-140*gl},85%,55%)`;g.beginPath();g.arc(gx,gy,17,.75*Math.PI,(.75+1.5*Math.max(.02,gl))*Math.PI);g.stroke();
+T('glow',gx,gy+4,10,'#e9e1f5');
+if(S.msgT>0)T(S.msg,W/2,80,13,'#ffb454');
+if(st!=='play'){g.fillStyle='#120a1fdd';g.fillRect(0,58,W,H-58);
+T('Spidihibiter',W/2,170,34,'#38e8e0');
+if(st==='over'){T('Cell overloaded',W/2,230,20,'#ff3b4e');T('Score '+S.score+'   Best '+best,W/2,262,16,'#e9e1f5');T('Tap to try again',W/2,330,18,'#e9e1f5')}
+else{T('Red mCherry strands fall toward the core.',W/2,235,14,'#e9e1f5');T('Fire the complementary asRNA to bind them.',W/2,258,14,'#e9e1f5');
+T('A pairs with U   G pairs with C',W/2,290,15,'#ffb454');
+T('Tap a column to move and fire.',W/2,330,14,'#e9e1f5');T('Dose sets how fast asRNA is made.',W/2,352,14,'#e9e1f5');T('Too high a dose burdens the cell.',W/2,374,14,'#e9e1f5');
+T('Tap to start',W/2,430,20,'#38e8e0')}}}
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;
+if(st==='play')update(dt);
+for(const p of S.parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=dt}S.parts=S.parts.filter(p=>p.l>0);
+draw();requestAnimationFrame(loop)}
+function start(){reset();st='play'}
+C.addEventListener('pointerdown',e=>{if(st!=='play'){start();return}
+const r=C.getBoundingClientRect();S.col=Math.max(0,Math.min(4,Math.floor((e.clientX-r.left)/r.width*5)));fire()});
+const dose=d=>{if(st==='play')S.dose=Math.max(0,Math.min(5,S.dose+d))},swap=()=>{if(st==='play')S.sel=(S.sel+1)%4};
+document.getElementById('dm').onclick=()=>dose(-1);document.getElementById('dp').onclick=()=>dose(1);document.getElementById('sw').onclick=swap;
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+if(st!=='play'){if(k===' '||k==='enter')start();return}
+if(k==='arrowleft'||k==='a')S.col=Math.max(0,S.col-1);
+else if(k==='arrowright'||k==='d')S.col=Math.min(4,S.col+1);
+else if(k===' '||k==='arrowup'||k==='w'){e.preventDefault();fire()}
+else if(k==='q'||k==='e'||k==='arrowdown'||k==='s')swap();
+else if(k==='[')dose(-1);else if(k===']')dose(1)});
+requestAnimationFrame(loop);
+</script></body></html>
